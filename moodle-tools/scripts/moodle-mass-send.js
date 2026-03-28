@@ -77,11 +77,8 @@
           Enviar como HTML
         </label>
 
-        <label style="display:block;font-size:13px;font-weight:600;margin-top:12px;margin-bottom:6px;">Adjuntos (opcional)</label>
-        <input type="file" id="tm-mass-send-file" multiple
-          style="width:100%;font-size:13px;border:1px solid #ccc;border-radius:8px;padding:8px;">
-        <div style="font-size:12px;color:#777;margin-top:4px;">
-          Puedes seleccionar varios archivos (Ctrl+clic). Los mismos se adjuntan a cada grupo. Verifica el límite de tamaño permitido por el foro.
+        <div style="margin-top:12px;font-size:12px;color:#777;">
+          Adjuntar documento real no está incluido en esta versión.
         </div>
 
         <div id="tm-mass-send-status" style="margin-top:12px;font-size:13px;color:#444;"></div>
@@ -139,7 +136,6 @@
     const subject = modal.querySelector('#tm-mass-send-subject').value.trim();
     const message = modal.querySelector('#tm-mass-send-message').value;
     const usarHTML = modal.querySelector('#tm-mass-send-html').checked;
-    const adjuntos = Array.from(modal.querySelector('#tm-mass-send-file').files);
     const status = modal.querySelector('#tm-mass-send-status');
     const runBtn = modal.querySelector('#tm-mass-send-run');
 
@@ -166,12 +162,9 @@
       return;
     }
 
-    const adjuntosInfo = adjuntos.length
-      ? `\nArchivos adjuntos: ${adjuntos.map(f => f.name).join(', ')}`
-      : '';
     const ok = confirm(
       `Se enviará el mismo mensaje a ${grupos.length} grupo(s), usando la primera discusión visible de cada grupo.\n\n` +
-      `Modo: ${usarHTML ? 'HTML' : 'Texto convertido a HTML'}${adjuntosInfo}\n\n¿Deseas continuar?`
+      `Modo: ${usarHTML ? 'HTML' : 'Texto convertido a HTML'}\n\n¿Deseas continuar?`
     );
     if (!ok) return;
 
@@ -193,8 +186,7 @@
             baseViewUrl,
             subject,
             message,
-            usarHTML,
-            adjuntos
+            usarHTML
           });
 
           resultados.push({
@@ -231,7 +223,7 @@
     }
   }
 
-  async function sendMessageToGroup({ grupo, baseViewUrl, subject, message, usarHTML, adjuntos }) {
+  async function sendMessageToGroup({ grupo, baseViewUrl, subject, message, usarHTML }) {
     const groupViewUrl = new URL(baseViewUrl);
     groupViewUrl.searchParams.set('group', grupo.id);
 
@@ -310,55 +302,7 @@
     formData.set('message[text]', contenidoFinal);
     formData.set('message[format]', '1');
 
-    // 7. Subir adjuntos al área de borrador si existen
-    if (adjuntos.length) {
-      const draftItemId = formData.get('attachments');
-      const sesskey = formData.get('sesskey');
-
-      if (!draftItemId || draftItemId === '0') {
-        throw new Error('No se encontró el área de borrador (attachments/draftitemid) para adjuntos.');
-      }
-
-      // Extraer contextid del documento de respuesta (múltiples fuentes)
-      const contextId =
-        docReply.querySelector('input[name="context"]')?.value ||
-        docReply.querySelector('input[name="contextid"]')?.value ||
-        docReply.body?.dataset?.coreContextid ||
-        (() => { const m = htmlReply.match(/"contextid"\s*:\s*(\d+)/); return m?.[1]; })();
-
-      const basePath = form.action.replace(/\/mod\/forum\/post\.php.*/, '');
-      const uploadUrl = `${basePath}/repository/ajax/uploader.php`;
-
-      for (const archivo of adjuntos) {
-        const uploadData = new FormData();
-        uploadData.append('action',           'upload');
-        uploadData.append('sesskey',          sesskey);
-        uploadData.append('repo_id',          '4');
-        uploadData.append('itemid',           draftItemId);
-        uploadData.append('savepath',         '/');
-        uploadData.append('maxbytes',         formData.get('maxbytes') || '-1');
-        uploadData.append('areamaxbytes',     formData.get('areamaxbytes') || '-1');
-        if (contextId) uploadData.append('ctx_id', contextId);
-        uploadData.append('repo_upload_file', archivo, archivo.name);
-
-        const uploadRes = await fetch(uploadUrl, {
-          method: 'POST',
-          body: uploadData,
-          credentials: 'include'
-        });
-
-        if (!uploadRes.ok) {
-          throw new Error(`No se pudo subir "${archivo.name}" (HTTP ${uploadRes.status})`);
-        }
-
-        const uploadJson = await uploadRes.json().catch(() => null);
-        if (uploadJson?.error) {
-          throw new Error(`Moodle rechazó "${archivo.name}": ${uploadJson.error}`);
-        }
-      }
-    }
-
-    // 8. Enviar POST real
+    // 7. Enviar POST real
     const postRes = await fetch(form.action, {
       method: 'POST',
       body: formData,
